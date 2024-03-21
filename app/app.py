@@ -1,8 +1,10 @@
-import json
 import os
 import sys
+import json
 import boto3
 import streamlit as st
+
+bucket_name = "learn-smart-rag"
 
 ## We will be suing Titan Embeddings Model To generate Embedding
 
@@ -64,7 +66,7 @@ def get_claude_llm():
 #     llm=Bedrock(model_id="meta.llama2-70b-chat-v1",client=bedrock,
 #                 model_kwargs={'max_gen_len':512})
     
-    return llm
+#    return llm
 
 prompt_template = """
 
@@ -99,36 +101,32 @@ def get_response_llm(llm,vectorstore_faiss,query):
 
 
 def main():
-    st.set_page_config("Chat PDF")
+    st.set_page_config("Learn Smart")
     
-    st.header("Chat with PDF using AWS Bedrock💁")
+    st.title("Chat with PDF using Learn Smart💁")
 
-    user_question = st.text_input("Ask a Question from the PDF Files")
 
-    with st.sidebar:
-        st.title("Update Or Create Vector Store:")
-        
+    # with st.sidebar:
+    st.header("Upload your PDF")
+    uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
+    if uploaded_file is not None:
+        # Save the uploaded file to the data directory
+        with open(os.path.join("data", "uploaded_file.pdf"), "wb") as f:
+            f.write(uploaded_file.getvalue())    
         if st.button("Vectors Update"):
-            with st.spinner("Processing..."):
+            with st.spinner("Processing PDF..."):
                 docs = data_ingestion()
                 get_vector_store(docs)
                 st.success("Done")
 
-    if st.button("Claude Output"):
+    user_question = st.text_input("Ask a Question from the PDF Files")
+
+    if st.button("Get answer"):
         with st.spinner("Processing..."):
             # Assuming you're using a function or method to load the pickle file
             faiss_index = FAISS.load_local("faiss_index", bedrock_embeddings, allow_dangerous_deserialization=True)
 
             llm=get_claude_llm()
-            
-            #faiss_index = get_vector_store(docs)
-            st.write(get_response_llm(llm,faiss_index,user_question))
-            st.success("Done")
-
-    if st.button("Llama2 Output"):
-        with st.spinner("Processing..."):
-            faiss_index = FAISS.load_local("faiss_index", bedrock_embeddings)
-            llm=get_llama2_llm()
             
             #faiss_index = get_vector_store(docs)
             st.write(get_response_llm(llm,faiss_index,user_question))
