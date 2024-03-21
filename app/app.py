@@ -113,7 +113,7 @@ def main():
         # Save the uploaded file to the data directory
         with open(os.path.join("data", "uploaded_file.pdf"), "wb") as f:
             f.write(uploaded_file.getvalue())    
-        if st.button("Vectors Update"):
+        if st.button("Upload PDF"):
             with st.spinner("Processing PDF..."):
                 docs = data_ingestion()
                 get_vector_store(docs)
