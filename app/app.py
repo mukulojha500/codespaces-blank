@@ -3,6 +3,7 @@ import sys
 import json
 import boto3
 import streamlit as st
+import shutil
 
 bucket_name = "learn-smart-rag"
 
@@ -46,11 +47,28 @@ def data_ingestion():
 ## Vector Embedding and vector store
 
 def get_vector_store(docs):
-    vectorstore_faiss=FAISS.from_documents(
-        docs,
-        bedrock_embeddings
-    )
-    vectorstore_faiss.save_local("faiss_index")
+    # Initialize S3 client
+    s3_client = boto3.client('s3')
+
+    # Create a temporary directory to save the embeddings
+    tmp_dir = "/tmp/embeddings"
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # Generate embeddings and save them in the temporary directory
+    vectorstore_faiss = FAISS.from_documents(docs, bedrock_embeddings)
+    vectorstore_faiss.save_local(tmp_dir)
+
+    # Upload embeddings to the S3 bucket
+    for root, dirs, files in os.walk(tmp_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+            s3_path = os.path.join(bucket_name, "embeddings", file)
+            s3_client.upload_file(local_path, bucket_name, s3_path)
+
+    # Clean up the temporary directory
+    shutil.rmtree(tmp_dir)
+
+    return vectorstore_faiss
 
 def get_claude_llm():
     ##create the Anthropic Model
@@ -67,6 +85,7 @@ def get_claude_llm():
 #                 model_kwargs={'max_gen_len':512})
     
 #    return llm
+
 
 prompt_template = """
 
@@ -99,14 +118,22 @@ def get_response_llm(llm,vectorstore_faiss,query):
     answer=qa({"query":query})
     return answer['result']
 
+def login(username, password):
+    if username=="mukul" and password=="1234":
+        return True
+    return False
 
 def main():
     st.set_page_config("Learn Smart")
     
     st.title("Chat with PDF using Learn Smart💁")
 
+    # username = st.text_input("Enter username")
+    # password = st.text_input("Enter password", type="password")
 
-    # with st.sidebar:
+    # if st.button("Submit") and login(username,password):
+    with st.sidebar:
+        st.title("History will be shown here")
     st.header("Upload your PDF")
     uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
     if uploaded_file is not None:
@@ -127,10 +154,11 @@ def main():
             faiss_index = FAISS.load_local("faiss_index", bedrock_embeddings, allow_dangerous_deserialization=True)
 
             llm=get_claude_llm()
-            
+                
             #faiss_index = get_vector_store(docs)
             st.write(get_response_llm(llm,faiss_index,user_question))
             st.success("Done")
+    
 
 if __name__ == "__main__":
     main()
