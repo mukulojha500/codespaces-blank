@@ -68,7 +68,7 @@ def get_vector_store(docs):
     # Clean up the temporary directory
     shutil.rmtree(tmp_dir)
 
-    return vectorstore_faiss
+    # return vectorstore_faiss
 
 def get_claude_llm():
     ##create the Anthropic Model
