@@ -5,6 +5,8 @@ import boto3
 import streamlit as st
 import shutil
 
+from datetime import datetime
+
 bucket_name = "learn-smart-rag"
 
 ## We will be suing Titan Embeddings Model To generate Embedding
@@ -68,7 +70,7 @@ def get_vector_store(docs):
     # Clean up the temporary directory
     shutil.rmtree(tmp_dir)
 
-    # return vectorstore_faiss
+    return vectorstore_faiss
 
 def get_claude_llm():
     ##create the Anthropic Model
@@ -118,47 +120,84 @@ def get_response_llm(llm,vectorstore_faiss,query):
     answer=qa({"query":query})
     return answer['result']
 
-def login(username, password):
-    if username=="mukul" and password=="1234":
-        return True
-    return False
+def save_chat_history(chat_history):
+    # Initialize S3 client
+    s3_client = boto3.client('s3')
+
+    # Ensure the data directory exists
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
+    # Load existing chat history or initialize a new one
+    existing_chat_history = []
+    if os.path.exists('data/chats.json'):
+        with open('data/chats.json', 'r') as f:
+            existing_chat_history = json.load(f)
+
+    # Append current chat history
+    existing_chat_history.extend(chat_history)
+
+    # Save the updated chat history to a JSON file
+    with open('data/chats.json', 'w') as f:
+        json.dump(existing_chat_history, f)
+    
+    # Convert the chat history to a JSON string
+    chat_history_json = json.dumps(chat_history)
+
+    # Save the chat history to a JSON file in the S3 bucket
+    s3_client.put_object(
+        Body=chat_history_json,
+        Bucket=bucket_name,
+        Key=os.path.join("learn-smart-rag/embeddings", "chats.json")
+    )
 
 def main():
     st.set_page_config("Learn Smart")
     
     st.title("Chat with PDF using Learn Smart💁")
 
-    # username = st.text_input("Enter username")
-    # password = st.text_input("Enter password", type="password")
-
-    # if st.button("Submit") and login(username,password):
     with st.sidebar:
         st.title("History will be shown here")
+
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+
     st.header("Upload your PDF")
     uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
     if uploaded_file is not None:
         # Save the uploaded file to the data directory
+        docs=data_ingestion()
         with open(os.path.join("data", "uploaded_file.pdf"), "wb") as f:
             f.write(uploaded_file.getvalue())    
         if st.button("Upload PDF"):
             with st.spinner("Processing PDF..."):
                 docs = data_ingestion()
-                get_vector_store(docs)
+                faiss_index=get_vector_store(docs)
                 st.success("Done")
 
-    user_question = st.text_input("Ask a Question from the PDF Files")
+        user_question = st.text_input("Ask a Question from the PDF Files")
 
-    if st.button("Get answer"):
-        with st.spinner("Processing..."):
-            # Assuming you're using a function or method to load the pickle file
-            faiss_index = FAISS.load_local("faiss_index", bedrock_embeddings, allow_dangerous_deserialization=True)
+        if st.button("Get answer"):
+            with st.spinner("Processing..."):
+                # Assuming you're using a function or method to load the pickle file
+                faiss_index = FAISS.load_local("faiss_index", bedrock_embeddings, allow_dangerous_deserialization=True)
 
-            llm=get_claude_llm()
-                
-            #faiss_index = get_vector_store(docs)
-            st.write(get_response_llm(llm,faiss_index,user_question))
-            st.success("Done")
-    
+                llm=get_claude_llm()
+                    
+                faiss_index = get_vector_store(docs)
+                response = get_response_llm(llm,faiss_index,user_question)
+                st.session_state.chat_history.append({"prompt": user_question, "answer": response})
+                st.write(response)
+                st.success("Done")
+
+        for chat in reversed(st.session_state.chat_history):
+            st.write(f"User:\n {chat['prompt']}")
+            st.write(f"Learn Smart:\n {chat['answer']}")   
+
+        if st.button("End Chat"):
+            save_chat_history(st.session_state.chat_history)
+            st.session_state.chat_history = []
+            st.write("Chat history saved. You can end the chat now.")
 
 if __name__ == "__main__":
     main()
